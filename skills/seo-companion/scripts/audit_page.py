@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
+import ipaddress
 import json
 import re
+import socket
 import sys
 from collections import Counter
 from urllib.parse import urljoin, urlparse
@@ -25,6 +27,16 @@ except ImportError:
 
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 TIMEOUT = 20
+BLOCKED_HOSTS = {
+    "localhost",
+    "metadata.google.internal",
+}
+BLOCKED_IPS = {
+    "127.0.0.1",
+    "0.0.0.0",
+    "::1",
+    "169.254.169.254",
+}
 
 
 def clean_text(value):
@@ -74,6 +86,52 @@ def same_host(a, b):
         return urlparse(a).netloc == urlparse(b).netloc
     except Exception:
         return False
+
+
+def is_blocked_target(url):
+    parsed = urlparse(url)
+    host = parsed.hostname
+    if not host:
+        return True, "URL is missing a valid hostname"
+
+    host_l = host.lower()
+    if host_l in BLOCKED_HOSTS:
+        return True, f"Blocked host: {host}"
+
+    try:
+        ip = ipaddress.ip_address(host_l)
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or str(ip) in BLOCKED_IPS
+        ):
+            return True, f"Blocked IP target: {ip}"
+    except ValueError:
+        pass
+
+    try:
+        infos = socket.getaddrinfo(host, None)
+        for info in infos:
+            resolved_ip = info[4][0]
+            ip = ipaddress.ip_address(resolved_ip)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+                or ip.is_multicast
+                or str(ip) in BLOCKED_IPS
+            ):
+                return True, f"Blocked resolved IP target: {resolved_ip}"
+    except socket.gaierror:
+        return True, f"Host did not resolve: {host}"
+    except Exception:
+        pass
+
+    return False, None
 
 
 def fetch(url):
@@ -241,6 +299,14 @@ def main():
         sys.exit(1)
 
     url = sys.argv[1]
+    blocked, reason = is_blocked_target(url)
+    if blocked:
+        print(
+            f"Refusing to audit target by default: {reason}. Use only public HTTP/HTTPS URLs for routine SEO audits.",
+            file=sys.stderr,
+        )
+        sys.exit(3)
+
     response, session = fetch(url)
     final_url = response.url
     soup = BeautifulSoup(response.text, "html.parser")

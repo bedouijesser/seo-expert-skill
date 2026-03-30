@@ -55,10 +55,24 @@ Preferred runtime for the bundled script:
 
 If those Python dependencies are missing:
 - do **not** fail silently
-- either install them if the environment/user permits, or
-- fall back to `web_fetch` for raw HTML/text inspection and `browser` for rendered-page inspection
+- **ask before installing packages** in environments where package installation changes the system/runtime state
+- if package installs are not approved or not appropriate, fall back to `web_fetch` for raw HTML/text inspection and `browser` for rendered-page inspection
 
 The script is optional support tooling, not a hard requirement for using this skill.
+
+## Target safety
+
+Do not run the bundled script against private/internal targets unless the user explicitly intends that and the environment is trusted.
+
+Treat these as blocked by default for routine SEO work:
+- `localhost`
+- loopback addresses
+- private RFC1918 IP ranges
+- link-local addresses
+- obvious cloud metadata endpoints
+- internal-only hostnames or intranet targets
+
+For normal public-site SEO auditing, stick to public HTTP/HTTPS URLs.
 
 ## Standard workflow for a URL audit
 
